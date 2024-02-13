@@ -1,18 +1,18 @@
 import logging
-from typing import Any
-from typing import Optional
-from typing import Union
+from typing import(
+         Any, Optional, 
+         Union)
 
-from ntgcalls import ConnectionError
-from ntgcalls import FileError
-from ntgcalls import InvalidParams
-from ntgcalls import TelegramServerError
+from ntgcalls import(
+         ConnectionError, FileError, 
+         InvalidParams, TelegramServerError
+)
 
-from ...exceptions import AlreadyJoinedError
-from ...exceptions import ClientNotStarted
-from ...exceptions import NoActiveGroupCall
-from ...exceptions import NoMTProtoClientSet
-from ...exceptions import UnMuteNeeded
+from ...exceptions import(
+         AlreadyJoinedError, ClientNotStarted, 
+         NoActiveGroupCall, NoMTProtoClientSet, 
+         UnMuteNeeded
+)
 from ...mtproto import BridgedClient
 from ...scaffold import Scaffold
 from ...statictypes import statictypes
@@ -45,24 +45,22 @@ class JoinGroupCall(Scaffold):
         if not self._is_running:
             raise ClientNotStarted()
 
-        chat_call = await self._app.get_full_chat(
-            chat_id,
-        )
+        chat_call = await self._app.get_full_chat(chat_id)
         if chat_call is None:
             if auto_start:
-                await self._app.create_group_call(
-                    chat_id,
-                )
+                await self._app.create_group_call(chat_id)
             else:
-                raise NoActiveGroupCall()
-        media_description = await StreamParams.get_stream_params(
-            stream,
-        )
+                raise NoActiveGroupCall()     
+        # Ensure the 'Start' class is initialized and running
+        start_instance = Start()
+        await start_instance.start()
+
+        media_description = await StreamParams.get_stream_params(stream)
 
         try:
             for retries in range(4):
                 call_params: str = await ToAsync(
-                    self._binding.create_call,
+                    start_instance._binding.create_call,
                     chat_id,
                     media_description,
                 )
@@ -76,7 +74,7 @@ class JoinGroupCall(Scaffold):
                         self._cache_user_peer.get(chat_id),
                     )
                     await ToAsync(
-                        self._binding.connect,
+                        start_instance._binding.connect,
                         chat_id,
                         result_params,
                     )
@@ -90,15 +88,11 @@ class JoinGroupCall(Scaffold):
                             f'Retrying {retries + 1} of 3',
                         )
 
-            participants = await self._app.get_group_call_participants(
-                chat_id,
-            )
+            participants = await self._app.get_group_call_participants(chat_id)
 
             for x in participants:
-                if x.user_id == BridgedClient.chat_id(
-                    self._cache_local_peer,
-                ) and x.muted_by_admin:
-                    self._need_unmute.add(chat_id)
+                if x.user_id == BridgedClient.chat_id(self._cache_local_peer) and x.muted_by_admin:
+                    start_instance._need_unmute.add(chat_id)
         except FileError:
             raise FileNotFoundError()
         except ConnectionError:
